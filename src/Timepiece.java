@@ -5,7 +5,6 @@ import java.time.format.DateTimeFormatter;
 public class Timepiece implements Runnable {
     private final DateTimeFormatter TIME_FORMATTER;
     private LocalTime time;
-
     private final JLabel timeLabel;
 
     public Timepiece(JLabel timeLabel, DateTimeFormatter TIME_FORMATTER, LocalTime time) {
@@ -37,6 +36,6 @@ public class Timepiece implements Runnable {
         };
 
         timerWorker.execute();
-        }
+    }
 
 }
