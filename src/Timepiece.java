@@ -3,13 +3,13 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 
 public class Timepiece implements Runnable {
-    private final DateTimeFormatter TIME_FORMATTER;
-    private LocalTime time;
+    private final DateTimeFormatter TIME_FORMATTER = ElevatorGUI.TIME_FORMATTER;
     private final JLabel timeLabel;
+    private LocalTime time;
+    private final int ONE_MINUTE = ElevatorGUI.ONE_MINUTE;
 
-    public Timepiece(JLabel timeLabel, DateTimeFormatter TIME_FORMATTER, LocalTime time) {
+    public Timepiece(JLabel timeLabel, LocalTime time) {
         this.timeLabel = timeLabel;
-        this.TIME_FORMATTER = TIME_FORMATTER;
         this.time = time;
     }
 
@@ -18,12 +18,15 @@ public class Timepiece implements Runnable {
             @Override
             protected Void doInBackground() throws Exception {
                 while (!isCancelled()) {
+                    if (time.getMinute() == 0) {
+                        PeopleControl.changePercentage(time.getHour());
+                    }
                     time = time.plusMinutes(1);
                     if (time.equals(LocalTime.MAX)) {
                         time = LocalTime.MIN;
                     }
                     publish(time);
-                    Thread.sleep(500);
+                    Thread.sleep(ONE_MINUTE);
                 }
                 return null;
             }

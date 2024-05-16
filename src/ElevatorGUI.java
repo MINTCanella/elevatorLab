@@ -7,13 +7,14 @@ import java.time.format.DateTimeFormatter;
 public class ElevatorGUI extends JFrame {
 
     // Данные для таймера
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH.mm");
-    private static final LocalTime time = LocalTime.of(12, 0);
+    public static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+    public static final LocalTime time = LocalTime.of(12, 0);
+    public static final int ONE_MINUTE = 100;
 
     // Данные для жилья
-    private static final int FLOORS = 20;
-    private static final int APARTMENTS_PER_FLOOR = 4;
-    private static final int OBJECT_PER_FLOOR = APARTMENTS_PER_FLOOR + 3;
+    public static final int FLOORS = 20;
+    public static final int APARTMENTS_PER_FLOOR = 4;
+    public static final int OBJECT_PER_FLOOR = APARTMENTS_PER_FLOOR + 3;
 
     // Графические данные
     MatteBorder allBorder = new MatteBorder(1, 1, 1, 1, Color.BLACK);
@@ -79,7 +80,8 @@ public class ElevatorGUI extends JFrame {
         add(mainPanel, BorderLayout.CENTER);
 
         // Запуск таймера
-        new Thread(new Timepiece(timeLabel, TIME_FORMATTER, time)).start();
+        new Thread(new Timepiece(timeLabel, time)).start();
+        new Thread(new PeopleControl(building, cellPanel)).start();
     }
 
     public static void main(String[] args) {
