@@ -16,8 +16,16 @@ public class ElevatorGUI extends JFrame {
     private static final int OBJECT_PER_FLOOR = APARTMENTS_PER_FLOOR + 3;
 
     // Графические данные
-    MatteBorder border = new MatteBorder(1, 1, 1, 1, Color.BLACK);
+    MatteBorder allBorder = new MatteBorder(1, 1, 1, 1, Color.BLACK);
     MatteBorder downBorder = new MatteBorder(0, 0, 1, 0, Color.BLACK);
+    MatteBorder sideBorder = new MatteBorder(0, 1, 0, 1, Color.BLACK);
+
+    public static JLabel createCell(MatteBorder borderName, int width, int height) {
+        JLabel cellPanel = new JLabel("", SwingConstants.CENTER);
+        cellPanel.setBorder(borderName);
+        cellPanel.setPreferredSize(new Dimension(width, height));
+        return cellPanel;
+    }
 
     public ElevatorGUI() {
         // Общие настройки графического интерфейса
@@ -40,16 +48,20 @@ public class ElevatorGUI extends JFrame {
         JLabel[][] cellPanel = new JLabel[FLOORS][OBJECT_PER_FLOOR];
         for (int floor = FLOORS - 1; floor >= 0; floor--) {
             JPanel rowPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 5));
-            for (int apartment = 0; apartment < APARTMENTS_PER_FLOOR; apartment++) {
-                cellPanel[floor][apartment] = new JLabel("", SwingConstants.CENTER);
-                cellPanel[floor][apartment].setBorder(border);
-                cellPanel[floor][apartment].setPreferredSize(new Dimension(75, 20));
-                rowPanel.add(cellPanel[floor][apartment]);
-            }
-            for (int apartment = APARTMENTS_PER_FLOOR; apartment < OBJECT_PER_FLOOR; apartment++) {
-                cellPanel[floor][apartment] = new JLabel("", SwingConstants.CENTER);
-                cellPanel[floor][apartment].setBorder(downBorder);
-                cellPanel[floor][apartment].setPreferredSize(new Dimension(50, 20));
+            for (int apartment = 0; apartment < OBJECT_PER_FLOOR; apartment++) {
+                MatteBorder borderName;
+                int width = 75;
+                int height = 20;
+                if (apartment < APARTMENTS_PER_FLOOR) {
+                    borderName = allBorder;
+                } else if (apartment == APARTMENTS_PER_FLOOR) {
+                    borderName = downBorder;
+                    width = 50;
+                } else {
+                    borderName = sideBorder;
+                    width = 50;
+                }
+                cellPanel[floor][apartment] = createCell(borderName, width, height);
                 rowPanel.add(cellPanel[floor][apartment]);
             }
             mainPanel.add(rowPanel);
