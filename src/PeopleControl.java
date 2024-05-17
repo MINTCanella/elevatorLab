@@ -1,23 +1,45 @@
 import javax.swing.*;
-import java.util.LinkedList;
-import java.util.Queue;
-import java.util.Random;
+import java.util.*;
 
 public class PeopleControl implements Runnable {
     private final int ONE_MINUTE = ElevatorGUI.ONE_MINUTE;
     private final int FLOORS = ElevatorGUI.FLOORS;
     private final int APARTMENTS_PER_FLOOR = ElevatorGUI.APARTMENTS_PER_FLOOR;
-    //private final int OBJECT_PER_FLOOR = ElevatorGUI.OBJECT_PER_FLOOR;
+    private final int OBJECT_PER_FLOOR = ElevatorGUI.OBJECT_PER_FLOOR;
     private static int LEAVING_PERCENTAGE;
     GeneratePeople.Apartments[][] building;
     JLabel[][] cellPanel;
-    private final Queue<Integer[]>[] waitingList = new LinkedList[FLOORS];
+    JLabel listLabel;
+    private final Queue<People>[] waitingList = new ArrayDeque[FLOORS];
+    private final Queue<People> waitingUpList = new ArrayDeque<>();
+    private final ArrayList<People> missingPeople = new ArrayList<>();
+    static final Random random = new Random();
 
-    public PeopleControl(GeneratePeople.Apartments[][] building, JLabel[][] cellPanel) {
+
+    public static class People {
+        int floor, apartments, count, chanceComeBack;
+
+        public People(int floor, int apartments, int count) {
+            this.floor = floor;
+            this.apartments = apartments;
+            this.count = count;
+            this.chanceComeBack = random.nextInt(10);
+        }
+
+        public People(People person, int count) {
+            this.floor = person.floor;
+            this.apartments = person.apartments;
+            this.count = count;
+            this.chanceComeBack = random.nextInt(10);
+        }
+    }
+
+    public PeopleControl(GeneratePeople.Apartments[][] building, JLabel[][] cellPanel, JLabel listLabel) {
         this.building = building;
         this.cellPanel = cellPanel;
+        this.listLabel = listLabel;
         for (int i = 0; i < FLOORS; i++) {
-            waitingList[i] = new LinkedList<>();
+            waitingList[i] = new ArrayDeque<>();
         }
     }
 
@@ -49,25 +71,63 @@ public class PeopleControl implements Runnable {
         SwingUtilities.invokeLater(() -> cellPanel[floor][APARTMENTS_PER_FLOOR].setText(String.valueOf(waitingList[floor].size())));
     }
 
+    public void updateCellPanel(int floor) {
+        SwingUtilities.invokeLater(() -> cellPanel[floor][APARTMENTS_PER_FLOOR].setText(String.valueOf(waitingList[floor].size())));
+    }
+
+    public void updateWaitingUpList() {
+        int count = waitingUpList.stream().mapToInt(missingPerson -> missingPerson.count).sum();
+        SwingUtilities.invokeLater(() -> cellPanel[0][OBJECT_PER_FLOOR - 1].setText(String.valueOf(count)));
+    }
+
+    public void updateList(ArrayList<People> missingPeople) {
+        StringBuilder people = new StringBuilder();
+        for (People missingPerson : missingPeople) {
+            people.append(missingPerson.floor).append("-").append(missingPerson.apartments).append("(").append(missingPerson.count).append("), ");
+        }
+        SwingUtilities.invokeLater(() -> listLabel.setText(String.valueOf(people)));
+    }
+
     public void run() {
         SwingWorker<Object, Object> peopleWorker = new SwingWorker<>() {
-            final Random random = new Random();
 
             @Override
             protected Void doInBackground() throws Exception {
                 while (!isCancelled()) {
                     Thread.sleep(ONE_MINUTE * 10);
+                    // Имитация выхода людей из квартиры в подъезд
                     for (int floor = 0; floor < FLOORS; floor++) {
                         for (int apartement = 0; apartement < APARTMENTS_PER_FLOOR; apartement++) {
                             if (random.nextInt(100) <= LEAVING_PERCENTAGE / 5 && building[floor][apartement].people > 0) {
-                                building[floor][apartement].people--;
-                                building[floor][apartement].missingPeople++;
-                                Integer[] indexes = new Integer[]{floor, apartement};
-                                waitingList[floor].add(indexes);
+                                int peopleLeave = 1 + random.nextInt(building[floor][apartement].people);
+                                building[floor][apartement].people -= peopleLeave;
+                                building[floor][apartement].missingPeople += peopleLeave;
+                                waitingList[floor].offer(new People(floor, apartement, peopleLeave));
                                 updateCellPanel(floor, apartement);
                             }
                         }
                     }
+                    // Люди с 0 этажа сразу могут выйти на улицу
+                    for (int people = 0; people < waitingList[0].size(); people++) {
+                        missingPeople.add(waitingList[0].poll());
+                    }
+                    updateList(missingPeople);
+                    updateCellPanel(0);
+                    // Имитация прихода людей к себе в дом
+                    for (int i = missingPeople.size() - 1; i >= 0; i--) {
+                        People missingPerson = missingPeople.get(i);
+                        if (random.nextInt(100) <= missingPerson.chanceComeBack) {
+                            int peopleLeave = 1 + random.nextInt(missingPerson.count);
+                            if (missingPerson.floor == 0) {
+                                building[0][missingPerson.apartments].people += peopleLeave;
+                                building[0][missingPerson.apartments].missingPeople -= peopleLeave;
+                                updateCellPanel(0, missingPerson.apartments);
+                            } else waitingUpList.add(new People(missingPerson, peopleLeave));
+                            missingPerson.count -= peopleLeave;
+                            if (missingPerson.count == 0) missingPeople.remove(i);
+                        } else missingPerson.chanceComeBack++;
+                    }
+                    updateWaitingUpList();
                 }
                 return null;
             }

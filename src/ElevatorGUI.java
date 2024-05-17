@@ -14,12 +14,15 @@ public class ElevatorGUI extends JFrame {
     // Данные для жилья
     public static final int FLOORS = 20;
     public static final int APARTMENTS_PER_FLOOR = 4;
-    public static final int OBJECT_PER_FLOOR = APARTMENTS_PER_FLOOR + 3;
+    public static final int OBJECT_PER_FLOOR = APARTMENTS_PER_FLOOR + 4;
 
     // Графические данные
     MatteBorder allBorder = new MatteBorder(1, 1, 1, 1, Color.BLACK);
+    MatteBorder noBorder = new MatteBorder(0, 0, 0, 0, Color.BLACK);
     MatteBorder downBorder = new MatteBorder(0, 0, 1, 0, Color.BLACK);
     MatteBorder sideBorder = new MatteBorder(0, 1, 0, 1, Color.BLACK);
+    public static final int WINDOW_WIDTH = 650;
+    public static final int WINDOW_HEIGHT = 650;
 
     public static JLabel createCell(MatteBorder borderName, int width, int height) {
         JLabel cellPanel = new JLabel("", SwingConstants.CENTER);
@@ -31,7 +34,7 @@ public class ElevatorGUI extends JFrame {
     public ElevatorGUI() {
         // Общие настройки графического интерфейса
         setTitle("Жилой дом");
-        setSize(650, 600);
+        setSize(650, 650);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setVisible(true);
         setResizable(false);
@@ -58,8 +61,12 @@ public class ElevatorGUI extends JFrame {
                 } else if (apartment == APARTMENTS_PER_FLOOR) {
                     borderName = downBorder;
                     width = 50;
-                } else {
+                } else if (apartment < APARTMENTS_PER_FLOOR + 3) {
                     borderName = sideBorder;
+                    width = 50;
+                } else {
+                    borderName = noBorder;
+                    if (floor == 0) borderName = downBorder;
                     width = 50;
                 }
                 cellPanel[floor][apartment] = createCell(borderName, width, height);
@@ -68,6 +75,12 @@ public class ElevatorGUI extends JFrame {
             mainPanel.add(rowPanel);
         }
 
+        // Расположение ушедших из квартир
+        JLabel listLabel = new JLabel("");
+        JScrollPane scrollPane = new JScrollPane(listLabel);
+        scrollPane.setPreferredSize(new Dimension(WINDOW_WIDTH, WINDOW_HEIGHT / 12));
+        add(scrollPane, BorderLayout.SOUTH);
+
         // Генерация жильцов
         GeneratePeople.Apartments[][] building = GeneratePeople.generatePeople(FLOORS, APARTMENTS_PER_FLOOR);
         for (int floor = 0; floor < FLOORS; floor++) {
@@ -75,13 +88,13 @@ public class ElevatorGUI extends JFrame {
                 cellPanel[floor][apartment].setText(building[floor][apartment].people + " | " + building[floor][apartment].missingPeople);
             }
             cellPanel[floor][APARTMENTS_PER_FLOOR].setText("0");
-
         }
+        cellPanel[0][OBJECT_PER_FLOOR - 1].setText("0");
         add(mainPanel, BorderLayout.CENTER);
 
         // Запуск таймера
         new Thread(new Timepiece(timeLabel, time)).start();
-        new Thread(new PeopleControl(building, cellPanel)).start();
+        new Thread(new PeopleControl(building, cellPanel, listLabel)).start();
     }
 
     public static void main(String[] args) {
