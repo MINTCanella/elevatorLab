@@ -1,5 +1,6 @@
 import javax.swing.*;
 import java.util.*;
+import java.util.concurrent.*;
 
 public class PeopleControl implements Runnable {
     private final int ONE_MINUTE = ElevatorGUI.ONE_MINUTE;
@@ -10,8 +11,8 @@ public class PeopleControl implements Runnable {
     GeneratePeople.Apartments[][] building;
     JLabel[][] cellPanel;
     JLabel listLabel;
-    private final Queue<People>[] waitingList = new ArrayDeque[FLOORS];
-    private final Queue<People> waitingUpList = new ArrayDeque<>();
+    private final Queue<People>[] waitingList = new ConcurrentLinkedQueue[FLOORS];
+    private final Queue<People> waitingUpList = new ConcurrentLinkedQueue<>();
     private final ArrayList<People> missingPeople = new ArrayList<>();
     static final Random random = new Random();
 
@@ -39,7 +40,7 @@ public class PeopleControl implements Runnable {
         this.cellPanel = cellPanel;
         this.listLabel = listLabel;
         for (int i = 0; i < FLOORS; i++) {
-            waitingList[i] = new ArrayDeque<>();
+            waitingList[i] = new ConcurrentLinkedQueue<>();
         }
     }
 
@@ -75,17 +76,56 @@ public class PeopleControl implements Runnable {
         SwingUtilities.invokeLater(() -> cellPanel[floor][APARTMENTS_PER_FLOOR].setText(String.valueOf(waitingList[floor].size())));
     }
 
-    public void updateWaitingUpList() {
+    public void updateWaitingUpCell() {
         int count = waitingUpList.stream().mapToInt(missingPerson -> missingPerson.count).sum();
         SwingUtilities.invokeLater(() -> cellPanel[0][OBJECT_PER_FLOOR - 1].setText(String.valueOf(count)));
     }
 
-    public void updateList(ArrayList<People> missingPeople) {
+    public void updateListCell(ArrayList<People> missingPeople) {
         StringBuilder people = new StringBuilder();
         for (People missingPerson : missingPeople) {
             people.append(missingPerson.floor).append("-").append(missingPerson.apartments).append("(").append(missingPerson.count).append("), ");
         }
         SwingUtilities.invokeLater(() -> listLabel.setText(String.valueOf(people)));
+    }
+
+    // Имитация выхода людей из квартиры в подъезд
+    public synchronized void apartmentsLeaving() {
+        for (int floor = 0; floor < FLOORS; floor++) {
+            for (int apartement = 0; apartement < APARTMENTS_PER_FLOOR; apartement++) {
+                if (random.nextInt(100) <= LEAVING_PERCENTAGE / 5 && building[floor][apartement].people > 0) {
+                    int peopleLeave = 1 + random.nextInt(building[floor][apartement].people);
+                    building[floor][apartement].people -= peopleLeave;
+                    building[floor][apartement].missingPeople += peopleLeave;
+                    waitingList[floor].offer(new People(floor, apartement, peopleLeave));
+                    updateCellPanel(floor, apartement);
+                }
+            }
+        }
+        // Люди с 0 этажа сразу могут выйти на улицу
+        for (int people = 0; people < waitingList[0].size(); people++) {
+            missingPeople.add(waitingList[0].poll());
+        }
+        updateListCell(missingPeople);
+        updateCellPanel(0);
+    }
+
+    // Имитация прихода людей к себе в дом
+    public synchronized void houseComing() {
+        for (int i = missingPeople.size() - 1; i >= 0; i--) {
+            People missingPerson = missingPeople.get(i);
+            if (random.nextInt(100) <= missingPerson.chanceComeBack) {
+                int peopleLeave = 1 + random.nextInt(missingPerson.count);
+                if (missingPerson.floor == 0) {
+                    building[0][missingPerson.apartments].people += peopleLeave;
+                    building[0][missingPerson.apartments].missingPeople -= peopleLeave;
+                    updateCellPanel(0, missingPerson.apartments);
+                } else waitingUpList.add(new People(missingPerson, peopleLeave));
+                missingPerson.count -= peopleLeave;
+                if (missingPerson.count == 0) missingPeople.remove(i);
+            } else missingPerson.chanceComeBack++;
+        }
+        updateWaitingUpCell();
     }
 
     public void run() {
@@ -95,39 +135,14 @@ public class PeopleControl implements Runnable {
             protected Void doInBackground() throws Exception {
                 while (!isCancelled()) {
                     Thread.sleep(ONE_MINUTE * 10);
-                    // Имитация выхода людей из квартиры в подъезд
-                    for (int floor = 0; floor < FLOORS; floor++) {
-                        for (int apartement = 0; apartement < APARTMENTS_PER_FLOOR; apartement++) {
-                            if (random.nextInt(100) <= LEAVING_PERCENTAGE / 5 && building[floor][apartement].people > 0) {
-                                int peopleLeave = 1 + random.nextInt(building[floor][apartement].people);
-                                building[floor][apartement].people -= peopleLeave;
-                                building[floor][apartement].missingPeople += peopleLeave;
-                                waitingList[floor].offer(new People(floor, apartement, peopleLeave));
-                                updateCellPanel(floor, apartement);
-                            }
-                        }
+                    try {
+                        apartmentsLeaving();
+                    } catch (Exception ignored) {
                     }
-                    // Люди с 0 этажа сразу могут выйти на улицу
-                    for (int people = 0; people < waitingList[0].size(); people++) {
-                        missingPeople.add(waitingList[0].poll());
+                    try {
+                        houseComing();
+                    } catch (Exception ignored) {
                     }
-                    updateList(missingPeople);
-                    updateCellPanel(0);
-                    // Имитация прихода людей к себе в дом
-                    for (int i = missingPeople.size() - 1; i >= 0; i--) {
-                        People missingPerson = missingPeople.get(i);
-                        if (random.nextInt(100) <= missingPerson.chanceComeBack) {
-                            int peopleLeave = 1 + random.nextInt(missingPerson.count);
-                            if (missingPerson.floor == 0) {
-                                building[0][missingPerson.apartments].people += peopleLeave;
-                                building[0][missingPerson.apartments].missingPeople -= peopleLeave;
-                                updateCellPanel(0, missingPerson.apartments);
-                            } else waitingUpList.add(new People(missingPerson, peopleLeave));
-                            missingPerson.count -= peopleLeave;
-                            if (missingPerson.count == 0) missingPeople.remove(i);
-                        } else missingPerson.chanceComeBack++;
-                    }
-                    updateWaitingUpList();
                 }
                 return null;
             }

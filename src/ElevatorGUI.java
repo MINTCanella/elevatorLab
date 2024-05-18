@@ -9,7 +9,7 @@ public class ElevatorGUI extends JFrame {
     // Данные для таймера
     public static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     public static final LocalTime time = LocalTime.of(12, 0);
-    public static final int ONE_MINUTE = 100;
+    public static final int ONE_MINUTE = 1000;
 
     // Данные для жилья
     public static final int FLOORS = 20;
@@ -70,6 +70,10 @@ public class ElevatorGUI extends JFrame {
                     width = 50;
                 }
                 cellPanel[floor][apartment] = createCell(borderName, width, height);
+                if (APARTMENTS_PER_FLOOR < apartment && apartment < APARTMENTS_PER_FLOOR + 3) {
+                    cellPanel[floor][apartment].setOpaque(true);
+                    cellPanel[floor][apartment].setForeground(new Color(238, 238, 238));
+                }
                 rowPanel.add(cellPanel[floor][apartment]);
             }
             mainPanel.add(rowPanel);
@@ -87,7 +91,9 @@ public class ElevatorGUI extends JFrame {
             for (int apartment = 0; apartment < APARTMENTS_PER_FLOOR; apartment++) {
                 cellPanel[floor][apartment].setText(building[floor][apartment].people + " | " + building[floor][apartment].missingPeople);
             }
-            cellPanel[floor][APARTMENTS_PER_FLOOR].setText("0");
+            for (int apartment = APARTMENTS_PER_FLOOR; apartment < OBJECT_PER_FLOOR - 1; apartment++) {
+                cellPanel[floor][apartment].setText("0");
+            }
         }
         cellPanel[0][OBJECT_PER_FLOOR - 1].setText("0");
         add(mainPanel, BorderLayout.CENTER);
@@ -95,6 +101,8 @@ public class ElevatorGUI extends JFrame {
         // Запуск таймера
         new Thread(new Timepiece(timeLabel, time)).start();
         new Thread(new PeopleControl(building, cellPanel, listLabel)).start();
+        new Thread(new ElevatorControl("Passenger", cellPanel)).start();
+        new Thread(new ElevatorControl("Service", cellPanel)).start();
     }
 
     public static void main(String[] args) {
