@@ -4,16 +4,18 @@ import java.util.concurrent.*;
 
 public class PeopleControl implements Runnable {
     private final int ONE_MINUTE = ElevatorGUI.ONE_MINUTE;
-    private final int FLOORS = ElevatorGUI.FLOORS;
-    private final int APARTMENTS_PER_FLOOR = ElevatorGUI.APARTMENTS_PER_FLOOR;
+    private static final int FLOORS = ElevatorGUI.FLOORS;
+    private static final int APARTMENTS_PER_FLOOR = ElevatorGUI.APARTMENTS_PER_FLOOR;
     private final int OBJECT_PER_FLOOR = ElevatorGUI.OBJECT_PER_FLOOR;
     private static int LEAVING_PERCENTAGE;
-    GeneratePeople.Apartments[][] building;
-    JLabel[][] cellPanel;
-    JLabel listLabel;
-    private final Queue<People>[] waitingList = new ConcurrentLinkedQueue[FLOORS];
-    private final Queue<People> waitingUpList = new ConcurrentLinkedQueue<>();
-    private final ArrayList<People> missingPeople = new ArrayList<>();
+    static GeneratePeople.Apartments[][] building;
+    static JLabel[][] cellPanel;
+    static JLabel listLabel;
+    private static final Queue<People>[] waitingList = new ConcurrentLinkedQueue[FLOORS];
+    private static final Queue<People> waitingUpList = new ConcurrentLinkedQueue<>();
+    private static final ArrayList<Integer> passengerCallOutside = new ArrayList<>();
+    private static final ArrayList<Integer> serviceCallOutside = new ArrayList<>();
+    private static final ArrayList<People> missingPeople = new ArrayList<>();
     static final Random random = new Random();
 
 
@@ -36,8 +38,8 @@ public class PeopleControl implements Runnable {
     }
 
     public PeopleControl(GeneratePeople.Apartments[][] building, JLabel[][] cellPanel, JLabel listLabel) {
-        this.building = building;
-        this.cellPanel = cellPanel;
+        PeopleControl.building = building;
+        PeopleControl.cellPanel = cellPanel;
         this.listLabel = listLabel;
         for (int i = 0; i < FLOORS; i++) {
             waitingList[i] = new ConcurrentLinkedQueue<>();
@@ -67,26 +69,67 @@ public class PeopleControl implements Runnable {
         }
     }
 
-    public void updateCellPanel(int floor, int apartments) {
-        SwingUtilities.invokeLater(() -> cellPanel[floor][apartments].setText(building[floor][apartments].people + " | " + building[floor][apartments].missingPeople));
-        SwingUtilities.invokeLater(() -> cellPanel[floor][APARTMENTS_PER_FLOOR].setText(String.valueOf(waitingList[floor].size())));
+    public static int getListCount(Queue<People> waitingList) {
+        return waitingList.stream().mapToInt(missingPerson -> missingPerson.count).sum();
     }
 
-    public void updateCellPanel(int floor) {
-        SwingUtilities.invokeLater(() -> cellPanel[floor][APARTMENTS_PER_FLOOR].setText(String.valueOf(waitingList[floor].size())));
+    public static synchronized Queue<People> getWaitingList(int floor) {
+        return waitingList[floor];
+    }
+
+    public static synchronized Queue<People> getWaitingUpList() {
+        return waitingUpList;
+    }
+
+    public static void updateWaitingList(int floor, Queue<People> list) {
+        waitingList[floor] = new ConcurrentLinkedQueue<>(list);
+        updateCellPanel(floor);
+    }
+
+
+    public static synchronized ArrayList<Integer> callOutside(String type) {
+        if (type.equals("Passenger")) return passengerCallOutside;
+        else return serviceCallOutside;
+    }
+
+    public static void updateCellPanel(int floor, int apartments) {
+        SwingUtilities.invokeLater(() -> cellPanel[floor][apartments].setText(building[floor][apartments].people + " | " + building[floor][apartments].missingPeople));
+        SwingUtilities.invokeLater(() -> cellPanel[floor][APARTMENTS_PER_FLOOR].setText(String.valueOf(getListCount(waitingList[floor]))));
+    }
+
+    public static void updateCellPanel(int floor) {
+        SwingUtilities.invokeLater(() -> cellPanel[floor][APARTMENTS_PER_FLOOR].setText(String.valueOf(getListCount(waitingList[floor]))));
     }
 
     public void updateWaitingUpCell() {
-        int count = waitingUpList.stream().mapToInt(missingPerson -> missingPerson.count).sum();
-        SwingUtilities.invokeLater(() -> cellPanel[0][OBJECT_PER_FLOOR - 1].setText(String.valueOf(count)));
+        SwingUtilities.invokeLater(() -> cellPanel[0][OBJECT_PER_FLOOR - 1].setText(String.valueOf(getListCount(waitingUpList))));
     }
 
-    public void updateListCell(ArrayList<People> missingPeople) {
+    public static void updateListCell(ArrayList<People> missingPeople) {
         StringBuilder people = new StringBuilder();
         for (People missingPerson : missingPeople) {
             people.append(missingPerson.floor).append("-").append(missingPerson.apartments).append("(").append(missingPerson.count).append("), ");
         }
         SwingUtilities.invokeLater(() -> listLabel.setText(String.valueOf(people)));
+    }
+
+    public static void goingOutside(Queue<People> waitingList) {
+        int size = waitingList.size();
+        for (int people = 0; people < size; people++) {
+            missingPeople.add(waitingList.poll());
+        }
+        updateListCell(missingPeople);
+    }
+
+    public static synchronized void unCallingElevator(int floor, String type) {
+        if (type.equals("Passenger")) passengerCallOutside.removeAll(Collections.singleton(floor));
+        else if (type.equals("Service")) serviceCallOutside.removeAll(Collections.singleton(floor));
+    }
+
+    public static synchronized void callingElevator(int floor, String type) {
+        if (floor == 0) return;
+        if (type.equals("Passenger") && !passengerCallOutside.contains(floor)) passengerCallOutside.add(floor);
+        else if (type.equals("Service") && !serviceCallOutside.contains(floor)) serviceCallOutside.add(floor);
     }
 
     // Имитация выхода людей из квартиры в подъезд
@@ -97,16 +140,14 @@ public class PeopleControl implements Runnable {
                     int peopleLeave = 1 + random.nextInt(building[floor][apartement].people);
                     building[floor][apartement].people -= peopleLeave;
                     building[floor][apartement].missingPeople += peopleLeave;
-                    waitingList[floor].offer(new People(floor, apartement, peopleLeave));
+                    waitingList[floor].add(new People(floor, apartement, peopleLeave));
                     updateCellPanel(floor, apartement);
+                    callingElevator(floor, "Passenger");
                 }
             }
         }
         // Люди с 0 этажа сразу могут выйти на улицу
-        for (int people = 0; people < waitingList[0].size(); people++) {
-            missingPeople.add(waitingList[0].poll());
-        }
-        updateListCell(missingPeople);
+        goingOutside(waitingList[0]);
         updateCellPanel(0);
     }
 
@@ -116,16 +157,21 @@ public class PeopleControl implements Runnable {
             People missingPerson = missingPeople.get(i);
             if (random.nextInt(100) <= missingPerson.chanceComeBack) {
                 int peopleLeave = 1 + random.nextInt(missingPerson.count);
-                if (missingPerson.floor == 0) {
-                    building[0][missingPerson.apartments].people += peopleLeave;
-                    building[0][missingPerson.apartments].missingPeople -= peopleLeave;
-                    updateCellPanel(0, missingPerson.apartments);
-                } else waitingUpList.add(new People(missingPerson, peopleLeave));
+                if (missingPerson.floor == 0) apartmentsComing(0, missingPerson.apartments, peopleLeave);
+                else waitingUpList.add(new People(missingPerson, peopleLeave));
                 missingPerson.count -= peopleLeave;
                 if (missingPerson.count == 0) missingPeople.remove(i);
             } else missingPerson.chanceComeBack++;
         }
+        assert waitingUpList.peek() != null;
         updateWaitingUpCell();
+    }
+
+    // Имитация прихода людей в квартиру
+    public static synchronized void apartmentsComing(int floor, int apartments, int count) {
+        building[floor][apartments].people += count;
+        building[floor][apartments].missingPeople -= count;
+        updateCellPanel(floor, apartments);
     }
 
     public void run() {
@@ -133,8 +179,8 @@ public class PeopleControl implements Runnable {
 
             @Override
             protected Void doInBackground() throws Exception {
+                Thread.sleep(ONE_MINUTE * 5);
                 while (!isCancelled()) {
-                    Thread.sleep(ONE_MINUTE * 10);
                     try {
                         apartmentsLeaving();
                     } catch (Exception ignored) {
@@ -143,6 +189,7 @@ public class PeopleControl implements Runnable {
                         houseComing();
                     } catch (Exception ignored) {
                     }
+                    Thread.sleep(ONE_MINUTE * 30);
                 }
                 return null;
             }
